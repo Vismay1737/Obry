@@ -93,7 +93,7 @@ export default function Dashboard() {
           <button type="submit" className="glow-btn" disabled={isScanning || !target}>
             {isScanning ? 'Scanning...' : 'Initiate'}
           </button>
-          <button type="button" className="glow-btn" style={{ background: 'transparent', border: '1px solid var(--card-border)' }}
+          <button type="button" className="glow-btn" style={{ background: 'transparent', border: '1px solid var(--card-border)', color: 'var(--text-main)' }}
             onClick={loadHistory} disabled={isScanning}>
             History
           </button>
