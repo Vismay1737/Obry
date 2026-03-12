@@ -1,7 +1,10 @@
 # Credits & Acknowledgments
 
-## 🦾 AI Assistance
-This project, **OrbyTech**, was developed with the assistance of **Antigravity**, a powerful agentic AI coding assistant designed by the Google DeepMind team. The AI played a critical role in:
+## 🦾 AI Assistant
+- **AI Agent Name:** Antigravity (by Google DeepMind)
+- **Role:** Full-stack development, system architecture, and UI/UX design.
+
+This project, **OrbyTech**, was developed with the assistance of **Antigravity**. The AI played a critical role in:
 - Architecting the distributed system between the FastAPI backend and Kali Linux engine.
 - Designing the modern "hacker-style" frontend UI with Glassmorphism aesthetics.
 - Implementing secure SSH tunneling for remote tool execution.
