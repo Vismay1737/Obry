@@ -1,63 +1,63 @@
 import json
-from openai import AsyncOpenAI
+import asyncio
+from google import genai
+from google.genai import types
 from core.config import settings
-
-client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 class AIService:
     @staticmethod
     async def analyze_scan_results(scan_results: dict):
-        """Send raw scan results to OpenAI for vulnerability analysis and scoring."""
-        if not settings.OPENAI_API_KEY:
+        """Send raw scan results to Gemini for vulnerability analysis and scoring."""
+        if not settings.GEMINI_API_KEY:
             return {
                 "security_score": 50,
-                "ai_analysis": "OpenAI API key not configured. Mock analysis provided.",
+                "ai_analysis": "Gemini API key not configured. Mock analysis provided.",
                 "vulnerabilities": [
                     {
                         "title": "API Key Missing",
                         "severity": "Low",
-                        "description": "The OpenAI API key is missing so deep analysis couldn't be performed.",
-                        "recommendation": "Configure OPENAI_API_KEY in the .env file."
+                        "description": "The Gemini API key is missing so deep analysis couldn't be performed.",
+                        "recommendation": "Configure GEMINI_API_KEY in the .env file."
                     }
                 ]
             }
 
         prompt = f"""
-        You are an expert cybersecurity analyst. Analyze the following raw output from various security tools (Nmap, WhatWeb, Subfinder, Nikto).
-        
-        Raw Data:
-        {json.dumps(scan_results, indent=2)}
-        
-        Provide your response exactly in the following JSON format:
+You are an expert cybersecurity analyst. Analyze the following raw output from various security tools (Nmap, WhatWeb, Subfinder, Nikto).
+
+Raw Data:
+{json.dumps(scan_results, indent=2)}
+
+Provide your response ONLY as a valid JSON object with no extra text or markdown, using this exact structure:
+{{
+    "security_score": <int from 0 to 100, where 100 is perfectly secure>,
+    "ai_analysis": "<A summary paragraph explaining the overall security posture and key findings>",
+    "vulnerabilities": [
         {{
-            "security_score": <int from 0 to 100, where 100 is perfectly secure>,
-            "ai_analysis": "<A summary paragraph explaining the overall security posture and key findings>",
-            "vulnerabilities": [
-                {{
-                    "title": "<Short title of the vulnerability>",
-                    "severity": "<Low, Medium, High, or Critical>",
-                    "description": "<Detailed explanation of the risk>",
-                    "recommendation": "<How to fix it>"
-                }}
-            ]
+            "title": "<Short title of the vulnerability>",
+            "severity": "<Low, Medium, High, or Critical>",
+            "description": "<Detailed explanation of the risk>",
+            "recommendation": "<How to fix it>"
         }}
-        """
+    ]
+}}
+"""
 
         try:
-            response = await client.chat.completions.create(
-                model="gpt-4-turbo-preview",
-                messages=[
-                    {"role": "system", "content": "You are a cybersecurity AI. Return only raw JSON without markup."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={ "type": "json_object" }
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model="gemini-2.0-flash-lite",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
-            
-            result_json = json.loads(response.choices[0].message.content)
+            result_json = json.loads(response.text)
             return result_json
         except Exception as e:
             return {
-                "security_score": 0,
-                "ai_analysis": f"Error analyzing results with AI: {str(e)}",
+                "security_score": 50,
+                "ai_analysis": f"AI analysis unavailable: {str(e)}",
                 "vulnerabilities": []
             }

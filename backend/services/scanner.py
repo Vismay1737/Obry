@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import asyncssh
+import re
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -13,11 +14,17 @@ async def run_command_local(cmd: str) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
+        # Add a global timeout for the whole command execution
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120.0)
+        
         if process.returncode != 0:
-            logger.error(f"Command '{cmd}' failed with error: {stderr.decode()}")
-            return f"Error running command: {stderr.decode()}"
+            err_msg = stderr.decode()
+            logger.error(f"Command '{cmd}' failed with error: {err_msg}")
+            return f"Error running command (Exit {process.returncode}): {err_msg}"
         return stdout.decode()
+    except asyncio.TimeoutError:
+        logger.error(f"Local command '{cmd}' timed out after 120s")
+        return "Error: Command execution timed out after 120 seconds."
     except Exception as e:
         logger.error(f"Exception running command '{cmd}': {e}")
         return str(e)
@@ -29,19 +36,27 @@ async def run_command_ssh(cmd: str) -> str:
     
     try:
         async with asyncssh.connect(
-            settings.KALI_HOST, 
+            settings.KALI_HOST,
+            port=settings.SSH_PORT,
             username=settings.KALI_USER, 
             password=settings.KALI_PASSWORD,
-            known_hosts=None # Ignore known_hosts verification for local VMs
+            known_hosts=None
         ) as conn:
-            result = await conn.run(cmd, check=False)
+            # Nikto and Subfinder can take time, increased timeout via wait_for
+            result = await asyncio.wait_for(conn.run(cmd, check=False), timeout=120.0)
+            
             if result.exit_status != 0:
                 logger.error(f"SSH Command '{cmd}' failed. Stderr: {result.stderr}")
-                return f"Error running command: {result.stderr}"
+                return f"Error running command: {result.stderr or result.stdout}"
             return result.stdout
+    except asyncio.TimeoutError:
+        logger.error(f"SSH command '{cmd}' timed out after 120s")
+        return "Error: Remote command execution timed out after 120 seconds."
     except Exception as e:
         logger.error(f"SSH Exception running command '{cmd}': {e}")
         return f"SSH connection failed: {str(e)}"
+    
+    return "Error: Unknown SSH execution failure"
 
 async def run_command(cmd: str) -> str:
     """Route command execution based on configuration."""
@@ -62,14 +77,22 @@ class ScannerService:
 
     @staticmethod
     async def run_subfinder(target: str) -> str:
-        # Note: Subfinder usually needs to run against a domain, not a full URL or IP. 
-        # For this PoC, we run it directly.
-        return await run_command(f"subfinder -d {target} -silent")
+        # Subfinder needs a domain (e.g. google.com). Strip http/https/paths.
+        domain = target
+        if "://" in target:
+            domain = target.split("://")[1].split("/")[0].split(":")[0]
+        
+        # Check if it's an IP (subfinder doesn't work on raw IPs)
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", domain):
+            return "Skipping subfinder (target is an IP address, not a domain)."
+            
+        return await run_command(f"subfinder -d {domain} -silent")
 
     @staticmethod
     async def run_nikto(target: str) -> str:
-        # Nikto can take a long time, we run a short tuned scan (-Tuning 1 for interesting files)
-        return await run_command(f"nikto -h {target} -Tuning 1 -maxtime 60s")
+        # maxtime 120s gives Nikto 5 minutes to find more vulnerabilities
+        # -Tuning 1 focuses on finding interesting files (quickest valuable scan)
+        return await run_command(f"nikto -h {target} -Tuning 1 -maxtime 120s")
 
     @classmethod
     async def run_all_scans(cls, target: str) -> dict:

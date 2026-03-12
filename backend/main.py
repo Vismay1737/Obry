@@ -5,8 +5,6 @@ from fastapi.responses import FileResponse
 from core.config import settings
 from db.database import connect_to_mongo, close_mongo_connection
 from api import scan
-from core.config import settings
-from db.database import connect_to_mongo, close_mongo_connection
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
