@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from core.config import settings
 from db.database import connect_to_mongo, close_mongo_connection
 from api import scan
@@ -18,6 +20,9 @@ app.add_middleware(
 
 app.include_router(scan.router, prefix="/api")
 
+# Mount the static directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.on_event("startup")
 async def startup_db_client():
     await connect_to_mongo()
@@ -28,4 +33,5 @@ async def shutdown_db_client():
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to OrbyTech API"}
+    # Serve the static frontend by default
+    return FileResponse("static/index.html")
