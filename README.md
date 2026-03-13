@@ -1,6 +1,6 @@
 # OrbyTech - Cybersecurity Copilot
 
-OrbyTech is a high-performance cybersecurity dashboard featuring a modern "Hacker UI," automated vulnerability scanning (Nmap, Nikto, WhatWeb, Subfinder), and secure orchestration with a remote Kali Linux environment via SSH.
+OrbyTech is a high-performance AI cybersecurity dashboard featuring a modern "Hacker UI," a suite of 9 integrated scanning tools (Nmap, Nikto, WhatWeb, Subfinder, HTTPX, Nuclei, Amass, Katana, GAU), and an AI Cybersecurity Copilot that parses raw logs into actionable intelligence.
 
 ## Project Structure
 

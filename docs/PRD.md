@@ -19,19 +19,19 @@ Running security tools manually via the terminal can be cumbersome, especially w
 
 ## 5. Functional Requirements
 - **Target Input:** Support for Domain names and IP addresses.
-- **Two-Stage Scanning:** Execute Nmap and WhatWeb (Fast) in Stage 1, followed by Nikto and Subfinder (Deep) in Stage 2.
-- **Real-time Incremental Results:** Show fast results from Stage 1 immediately while deep scans continue in the background.
+- **Concurrent Scanning Suite:** Execute 9 industrial tools (Nmap, WhatWeb, HTTPX, Subfinder, Amass, GAU, Nikto, Nuclei, Katana) in parallel.
+- **Real-time Live Streaming:** Update the dashboard incrementally as each tool finishes via non-blocking database persistence.
 - **Live Status Badges:** Visual indication (e.g., "LIVE UPDATING") when background tools are still active.
 - **Tabbed Results:** Clean separation of raw terminal outputs for each tool.
 - **Scan History:** Persistent storage of results in a NoSQL database.
 
 ## 6. Non-Functional Requirements
-- **Security:** Use encrypted SSH tunnels for remote payouts.
-- **Deep-Scan Stability:** Increased execution timeouts (600s) to ensure Nikto and Subfinder complete successfully on complex targets.
+- **Security:** Use multiplexed encrypted SSH tunnels for remote orchestration.
+- **Optimized Performance:** Tool-specific timeouts (120s-180s) and SSH connection sharing for zero-lag scanning.
 - **Aesthetics:** "Hacker-style" dark mode UI with modern animations (Glassmorphism).
 - **Scalability:** Ability to separate the scanning engine (Kali) from the application server.
 
-## 7. Future Scope
-- **AI Analysis:** Re-integration of AI for vulnerability explanation once API quotas are resolved.
-- **PDF Reports:** Downloadable summaries of scan results.
-- **Custom Toolbars:** Ability for users to add their own custom bash commands to the scan suite.
+## 7. Current Implementation Status
+- **AI Analysis:** Fully functional. Uses an LLM to analyze the 9 integrated scan results.
+- **Full Tool Suite:** All 9 tools are integrated and functional on the remote Kali node.
+- **PDF Reports:** Planned for Phase 1 of post-hackathon roadmap.

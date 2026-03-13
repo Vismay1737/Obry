@@ -34,7 +34,12 @@ graph LR
     "nmap": "string",
     "nikto": "string",
     "whatweb": "string",
-    "subfinder": "string"
+    "subfinder": "string",
+    "httpx": "string",
+    "nuclei": "string",
+    "amass": "string",
+    "katana": "string",
+    "gau": "string"
   }
 }
 ```
@@ -42,8 +47,8 @@ graph LR
 ## 4. Security Implementation
 - **SSH Encapsulation:** All commands sent from the backend to Kali are wrapped in an `asyncssh` session.
 - **Port Forwarding:** The backend connects to `127.0.0.1:2222`, which is mapped to the Kali VM's port 22 in VirtualBox NAT settings.
-- **Timeout Management:** Each tool is governed by a **10-minute (600s)** execution cap to ensure deep vulnerability analysis (Nikto) and passive discovery (Subfinder) complete successfully.
-- **Incremental Persistence:** The background worker updates the database in two stages, allowing the frontend to poll and display Stage 1 results while Stage 2 tools are still active.
+- **SSH Multiplexing:** Share a single persistent connection across all 9 concurrent tools to eliminate connection lag (~20s saved/scan).
+- **Incremental Persistence:** Background worker updates the database as each tool finishes, providing real-time UI updates.
 
 ## 5. UI/UX Design System
 - **Theme:** Ultra-dark mode (#030305).

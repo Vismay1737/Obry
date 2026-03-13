@@ -1,14 +1,14 @@
 # Hackathon Project Report: OrbyTech
 
 **Project Title:** OrbyTech – AI Cybersecurity Copilot  
-**Team Name:** [Insert Team Name]  
-**Team ID:** [Insert Team ID/Number]  
+**Team Name:** Orby  
+**Team ID:** AK1693  
 **Hackathon Track / Domain:** Cybersecurity / AI & Machine Learning  
 **Team Members:**  
-1. [Insert Name] - Full Stack Developer (FastAPI, Next.js, & System Architecture)
-2. [Insert Name] - Security Engineer (Kali Linux Tooling & SSH Orchestration)
-3. [Insert Name] - UI/UX Designer (Glassmorphism & Motion Graphics)
-4. [Insert Name] - AI Engineer (LLM Integration & Prompt Engineering)
+1. Vismay - Full Stack Developer (FastAPI, Next.js, & System Architecture)
+2. Karthik - Security Engineer (Kali Linux Tooling & SSH Orchestration)
+3. Thanush - UI/UX Designer (Glassmorphism & Motion Graphics)
+4. Manvith - AI Engineer (LLM Integration & Prompt Engineering)
 
 ---
 
@@ -24,10 +24,10 @@ OrbyTech is an AI-powered cybersecurity orchestration platform that simplifies c
 **Core Idea:** OrbyTech acts as a "Mission Control" for security scans, using an asynchronous backend to orchestrate remote tools and an AI "Copilot" to synthesize raw logs into human-readable reports.
 
 **Key Features:**
-*   **Feature 1: Remote SSH Orchestration:** Securely offloads heavy-duty scanning to an isolated Kali Linux instance via encrypted tunnels, protecting the host environment.
-*   **Feature 2: Two-Stage Execution Architecture:** Delivers instant "Stage 1" results (Nmap/WhatWeb) in seconds, while "Stage 2" deep-scans (Nikto/Subfinder) continue in the background.
-*   **Feature 3: AI Copilot (Llama-3):** A specialized cybersecurity LLM that parses tool logs to identify critical risks and provide step-by-step remediation instructions.
-*   **Innovation/USP:** The combination of **distributed execution** (remote Kali) and **real-time incremental feedback** makes it the fastest and most secure way to audit a digital attack surface.
+*   **Feature 1: Multiplexed SSH Orchestration:** Securely offloads heavy-duty scanning to an isolated Kali Linux instance via a single persistent encrypted tunnel, eliminating login lag.
+*   **Feature 2: 9-Tool Concurrent Engine:** Executes Nmap, WhatWeb, HTTPX, Subfinder, Amass, GAU, Nikto, Nuclei, and Katana in parallel for maximum speed.
+*   **Feature 3: AI Copilot (Cyber-LLM):** A specialized LLM that parses logs from all 9 tools to identify critical risks and provide actionable remediation steps.
+*   **Innovation/USP:** The combination of **distributed execution** and **concurrent real-time feedback** makes it one of the fastest auditing platforms available for developers.
 
 ### 4. Methodology & System Architecture
 
@@ -36,7 +36,7 @@ OrbyTech is an AI-powered cybersecurity orchestration platform that simplifies c
 *   **Backend:** FastAPI (Python), Python AsyncIO for non-blocking task management.
 *   **Database:** MongoDB Atlas (NoSQL) for flexible scan persistence and history.
 *   **AI/ML/Cloud:** Meta Llama-3 (8B) via Hugging Face Transformers, Accelerated with CUDA and bfloat16.
-*   **Security Engine:** Kali Linux binaries (Nmap, Nikto, WhatWeb, Subfinder) executed via AsyncSSH.
+*   **Security Engine:** 9 Integrated Tools (Nmap, Nikto, WhatWeb, Subfinder, HTTPX, Nuclei, Amass, Katana, GAU) executed via multiplexed AsyncSSH.
 
 #### 4.2 System Flow
 1.  **Request Initiation:** User enters a target (Domain/IP) into the Next.js dashboard.
