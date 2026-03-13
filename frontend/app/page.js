@@ -2,14 +2,20 @@
 
 import { useState, useEffect } from 'react'
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = '/api'
 
-const TOOLS = ['nmap', 'whatweb', 'subfinder', 'nikto']
+const TOOLS = ['nmap', 'whatweb', 'httpx', 'nuclei', 'amass', 'subfinder', 'katana', 'gau', 'nikto', 'ai']
 const TOOL_LABELS = {
   nmap: '🔍 Nmap — Port Scanner',
   whatweb: '🌐 WhatWeb — Tech Fingerprint',
+  httpx: '🚀 HTTPX — Live Domains/Tech',
+  nuclei: '🎯 Nuclei — Vulnerability Scan',
+  amass: '🏗️ Amass — Passive Enum',
   subfinder: '📡 Subfinder — Subdomain Enum',
-  nikto: '🛡️ Nikto — Web Vulnerability'
+  katana: '🗡️ Katana — Web Crawler',
+  gau: '🧹 GAU — Hidden Endpoints',
+  nikto: '🛡️ Nikto — Web Scraper',
+  ai: '🤖 AI Copilot — Security Analysis'
 }
 
 export default function Dashboard() {
@@ -25,14 +31,16 @@ export default function Dashboard() {
 
   // Poll for results when scan is running
   useEffect(() => {
-    if (!scanId || !isScanning) return
+    if (!scanId || !isScanning || showHistory) return
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`${API_BASE}/scans/${scanId}`)
         const data = await res.json()
         
-        // Always update the result to show partial tool outputs
-        setScanResult(data)
+        // Only update if we are not currently looking at history
+        if (!showHistory) {
+          setScanResult(data)
+        }
         
         if (data.status === 'completed' || data.status === 'failed') {
           setIsScanning(false)
@@ -41,15 +49,20 @@ export default function Dashboard() {
       } catch (e) {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [scanId, isScanning])
+  }, [scanId, isScanning, showHistory])
 
   const loadHistory = async () => {
     try {
-      const res = await fetch(`${API_BASE}/scans`)
-      setHistory(await res.json())
       setShowHistory(true)
+      setScanResult(null)
+      setError(null)
+      const res = await fetch(`${API_BASE}/scans`)
+      if (!res.ok) throw new Error('Failed to fetch history')
+      const data = await res.json()
+      setHistory(data)
     } catch (e) {
-      setError('Could not load scan history')
+      console.error(e)
+      setError('Could not load scan history. Ensure backend is running.')
     }
   }
 
@@ -80,10 +93,19 @@ export default function Dashboard() {
   return (
     <div className="container">
       <header className="header">
-        <div className="ai-orb"></div>
+        <div className="ai-orb-container">
+          <div className="ai-orb"></div>
+        </div>
         <h1>OrbyTech Copilot</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-          Kali Linux Security Scanner — Nmap · Nikto · WhatWeb · Subfinder
+        {isScanning && (
+          <div className="searching-pill">
+            <span className="spinner-small"></span>
+            <span>Orby AI is scanning {target}</span>
+            <span className="pulse-dot"></span>
+          </div>
+        )}
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '1rem', marginBottom: '1rem' }}>
+          Kali Linux Pro Toolkit — Nmap · Nuclei · HTTPX · Amass · Katana · GAU · Nikto
         </p>
         <form className="scanner-input-container" onSubmit={handleScan}>
           <input
@@ -118,8 +140,10 @@ export default function Dashboard() {
             </h2>
             <div className="terminal-mode" style={{ marginTop: '20px', textAlign: 'left' }}>
               <p>{'>'} Spawning nmap stealth port scan...</p>
-              <p>{'>'} Fingerprinting web technologies with WhatWeb...</p>
-              <p>{'>'} Preparing Subfinder and Nikto in background...</p>
+              <p>{'>'} Fingerprinting tech with WhatWeb & HTTPX...</p>
+              <p>{'>'} Enumerating subdomains with Amass & Subfinder...</p>
+              <p>{'>'} Crawling paths with Katana & discovering endpoints with GAU...</p>
+              <p>{'>'} Preparing deep vulnerability scans with Nuclei & Nikto...</p>
             </div>
           </div>
         )}
@@ -127,7 +151,14 @@ export default function Dashboard() {
         {scanResult && (
           <div className="glass-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ color: 'var(--accent-cyan)' }}>Scan Results: {scanResult.target}</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <h2 style={{ color: 'var(--accent-cyan)' }}>Scan Results: {scanResult.target}</h2>
+                {isScanning && scanResult.raw_output?.nmap && !scanResult.raw_output?.nikto && (
+                  <p style={{ color: '#ffcc00', fontSize: '0.85rem' }}>
+                    🚀 Stage 1 Complete. Initiating Deep Scan (Nikto & Subfinder)...
+                  </p>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 {isScanning && (
                   <span style={{
@@ -161,36 +192,61 @@ export default function Dashboard() {
                     color: activeTab === tool ? '#000' : 'var(--text-muted)',
                     fontWeight: activeTab === tool ? 700 : 400,
                     fontFamily: 'inherit',
-                    position: 'relative'
+                    position: 'relative',
+                    border: tool === 'ai' ? '1px solid rgba(0, 243, 255, 0.3)' : 'none'
                   }}>
                   {tool.toUpperCase()}
-                  {isScanning && !scanResult.raw_output?.[tool] && (
+                  {isScanning && !scanResult.raw_output?.[tool] && tool !== 'ai' && (
                     <span style={{ 
                       width: '6px', height: '6px', background: '#ffcc00', 
                       borderRadius: '50%', position: 'absolute', top: '5px', right: '5px',
                       boxShadow: '0 0 5px #ffcc00'
                     }}></span>
                   )}
+                  {isScanning && tool === 'ai' && !scanResult.ai_analysis && (
+                    <span className="spinner-small" style={{ position: 'absolute', top: '5px', right: '5px' }}></span>
+                  )}
                 </button>
               ))}
             </div>
 
-            {/* Raw output */}
+            {/* Content display */}
             <div>
-              <h3 style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              <h3 style={{ color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {TOOL_LABELS[activeTab]}
+                {activeTab === 'ai' && isScanning && <span className="spinner-small"></span>}
               </h3>
-              <div className="terminal-mode" style={{ minHeight: '300px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.82rem', lineHeight: '1.6' }}>
-                {scanResult.raw_output?.[activeTab] || (isScanning ? `Awaiting output from ${activeTab}...` : `No output for ${activeTab}.`)}
+              <div className="terminal-mode" style={{ 
+                minHeight: '400px', 
+                whiteSpace: 'pre-wrap', 
+                wordBreak: 'break-all', 
+                fontSize: activeTab === 'ai' ? '1rem' : '0.85rem', 
+                lineHeight: '1.8',
+                color: activeTab === 'ai' ? '#fff' : 'var(--success)',
+                background: activeTab === 'ai' ? 'rgba(0,0,0,0.85)' : '#000',
+                border: activeTab === 'ai' ? '1px solid var(--accent-purple)' : '1px solid rgba(0, 255, 136, 0.2)',
+                padding: '30px',
+                boxShadow: activeTab === 'ai' ? '0 0 40px rgba(157, 0, 255, 0.1)' : 'none'
+              }}>
+                {activeTab === 'ai' 
+                  ? (scanResult.ai_analysis || (isScanning ? "Orby AI is currently synthesizing tool outputs into a security report...\n\n> Parsing Nmap service versions\n> Evaluating Nikto vulnerability surface\n> Correlating WhatWeb tech stack..." : "Awaiting final analysis results."))
+                  : (scanResult.raw_output?.[activeTab] || (isScanning ? `[SYSTEM] Awaiting output from ${activeTab}...\n[SYSTEM] Establishing remote connection...` : `No output for ${activeTab}.`))
+                }
               </div>
             </div>
           </div>
         )}
 
         {/* History */}
-        {showHistory && !isScanning && !scanResult && (
+        {showHistory && (
           <div className="glass-panel">
-            <h2 style={{ color: 'var(--accent-cyan)', marginBottom: '1.5rem' }}>Scan History</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: 'var(--accent-cyan)' }}>Scan History</h2>
+              <button className="glow-btn" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '0.8rem' }}
+                onClick={() => setShowHistory(false)}>
+                ✕ Close
+              </button>
+            </div>
             {history.length === 0 ? (
               <p style={{ color: 'var(--text-muted)' }}>No scans yet.</p>
             ) : (
@@ -204,7 +260,13 @@ export default function Dashboard() {
                     {new Date(s.created_at).toLocaleString()} — {s.status}
                   </span>
                   <button className="glow-btn" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
-                    onClick={() => { setScanResult(s); setShowHistory(false) }}>
+                    onClick={() => { 
+                      setScanResult(s); 
+                      setTarget(s.target);
+                      setScanId(s._id || s.id);
+                      setIsScanning(s.status === 'running');
+                      setShowHistory(false); 
+                    }}>
                     View
                   </button>
                 </div>
@@ -225,19 +287,35 @@ export default function Dashboard() {
           <div className="info-grid">
             <div className="info-card">
               <h3>🔍 Nmap</h3>
-              <p>The Network Mapper is the gold standard for port scanning and network discovery. It identifies open services, OS fingerprints, and potential entry points.</p>
+              <p>Network Mapper identifies open services and potential entry points.</p>
+            </div>
+            <div className="info-card">
+              <h3>🎯 Nuclei</h3>
+              <p>Templated vulnerability scanner for high-confidence security findings across entire infrastructures.</p>
+            </div>
+            <div className="info-card">
+              <h3>🚀 HTTPX</h3>
+              <p>High-performance tool for probing live domains, status codes, and technology stacks at scale.</p>
+            </div>
+            <div className="info-card">
+              <h3>🏗️ Amass</h3>
+              <p>Active and passive domain enumeration to map out an organization's entire external attack surface.</p>
+            </div>
+            <div className="info-card">
+              <h3>🗡️ Katana</h3>
+              <p>Next-generation crawling framework for automated URL discovery and web resource spidering.</p>
+            </div>
+            <div className="info-card">
+              <h3>🧹 GAU</h3>
+              <p>Fetches known URLs from web archives to uncover long-forgotten or hidden endpoints.</p>
             </div>
             <div className="info-card">
               <h3>🛡️ Nikto</h3>
-              <p>A comprehensive web server scanner that tests for over 6,700 potentially dangerous files and programs, outdated versions, and specific server misconfigurations.</p>
-            </div>
-            <div className="info-card">
-              <h3>🌐 WhatWeb</h3>
-              <p>Identifies content management systems (CMS), blogging platforms, statistic/analytics packages, JavaScript libraries, and web servers used by the target.</p>
+              <p>Tests for over 6,700 dangerous files, outdated versions, and server misconfigurations.</p>
             </div>
             <div className="info-card">
               <h3>📡 Subfinder</h3>
-              <p>An advanced tool for subdomain discovery. It uses passive sources to map out the entire domain infrastructure, uncovering hidden assets.</p>
+              <p>Fast passive subdomain discovery tool using multiple data sources.</p>
             </div>
           </div>
         </div>

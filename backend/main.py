@@ -5,6 +5,10 @@ from fastapi.responses import FileResponse
 from core.config import settings
 from db.database import connect_to_mongo, close_mongo_connection
 from api import scan
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.PROJECT_NAME)
 

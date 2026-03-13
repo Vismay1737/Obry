@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     KALI_PASSWORD: str = os.getenv("KALI_PASSWORD", "")
     SSH_PORT: int = int(os.getenv("SSH_PORT", "22"))
 
+    # AI Configuration
+    USE_REAL_AI: bool = os.getenv("USE_REAL_AI", "false").lower() == "true"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
