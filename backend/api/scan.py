@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+import asyncio
 from bson import ObjectId
 from models.scan import ScanRequest, ScanResult
 from services.scanner import ScannerService
@@ -10,17 +11,37 @@ router = APIRouter()
 
 async def background_scan_task(target: str, scan_id: str):
     db = get_db()
+    results = {}
     try:
-        # Run all Kali tools concurrently
-        raw_results = await ScannerService.run_all_scans(target)
+        # STAGE 1: Fast tools (Nmap, WhatWeb)
+        stage1_results = await asyncio.gather(
+            ScannerService.run_nmap(target),
+            ScannerService.run_whatweb(target)
+        )
+        results["nmap"] = stage1_results[0]
+        results["whatweb"] = stage1_results[1]
 
-        # Save results directly — no AI step
+        # Save partial results immediately
+        await db["scans"].update_one(
+            {"_id": ObjectId(scan_id)},
+            {"$set": {"raw_output": results}}
+        )
+
+        # STAGE 2: Slower tools (Subfinder, Nikto)
+        stage2_results = await asyncio.gather(
+            ScannerService.run_subfinder(target),
+            ScannerService.run_nikto(target)
+        )
+        results["subfinder"] = stage2_results[0]
+        results["nikto"] = stage2_results[1]
+
+        # Final update
         await db["scans"].update_one(
             {"_id": ObjectId(scan_id)},
             {
                 "$set": {
                     "status": "completed",
-                    "raw_output": raw_results,
+                    "raw_output": results,
                     "completed_at": __import__("datetime").datetime.utcnow()
                 }
             }
@@ -29,7 +50,7 @@ async def background_scan_task(target: str, scan_id: str):
         print(f"Error during background scan: {traceback.format_exc()}")
         await db["scans"].update_one(
             {"_id": ObjectId(scan_id)},
-            {"$set": {"status": "failed", "raw_output": {"error": str(e)}}}
+            {"$set": {"status": "failed", "raw_output": results, "error": str(e)}}
         )
 
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 
-const API_BASE = 'http://127.0.0.1:8000/api'
+const API_BASE = 'http://localhost:8000/api'
 
 const TOOLS = ['nmap', 'whatweb', 'subfinder', 'nikto']
 const TOOL_LABELS = {
@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+  const [user, setUser] = useState(true) // Default to true to allow access without login
 
   // Poll for results when scan is running
   useEffect(() => {
@@ -29,8 +30,11 @@ export default function Dashboard() {
       try {
         const res = await fetch(`${API_BASE}/scans/${scanId}`)
         const data = await res.json()
+        
+        // Always update the result to show partial tool outputs
+        setScanResult(data)
+        
         if (data.status === 'completed' || data.status === 'failed') {
-          setScanResult(data)
           setIsScanning(false)
           clearInterval(interval)
         }
@@ -107,32 +111,44 @@ export default function Dashboard() {
           </div>
         )}
 
-        {isScanning && (
+        {isScanning && !scanResult?.raw_output && (
           <div className="glass-panel" style={{ textAlign: 'center', padding: '60px 20px' }}>
             <h2 className="typing-indicator" style={{ color: 'var(--accent-cyan)' }}>
-              Running Security Tools on {target}
+              Preparing Security Tools for {target}
             </h2>
             <div className="terminal-mode" style={{ marginTop: '20px', textAlign: 'left' }}>
               <p>{'>'} Spawning nmap stealth port scan...</p>
               <p>{'>'} Fingerprinting web technologies with WhatWeb...</p>
-              <p>{'>'} Enumerating subdomains with Subfinder...</p>
-              <p>{'>'} Running Nikto web vulnerability scanner...</p>
+              <p>{'>'} Preparing Subfinder and Nikto in background...</p>
             </div>
           </div>
         )}
 
-        {!isScanning && scanResult && (
+        {scanResult && (
           <div className="glass-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ color: 'var(--accent-cyan)' }}>Scan Results: {scanResult.target}</h2>
-              <span style={{
-                padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600,
-                background: scanResult.status === 'completed' ? 'rgba(0,255,136,0.15)' : 'rgba(255,77,109,0.15)',
-                color: scanResult.status === 'completed' ? '#00ff88' : '#ff4d6d',
-                border: `1px solid ${scanResult.status === 'completed' ? '#00ff88' : '#ff4d6d'}`
-              }}>
-                {scanResult.status.toUpperCase()}
-              </span>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {isScanning && (
+                  <span style={{
+                    padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600,
+                    background: 'rgba(0,195,255,0.15)', color: 'var(--accent-cyan)', border: '1px solid var(--accent-cyan)'
+                  }}>
+                    LIVE UPDATING...
+                  </span>
+                )}
+                <span style={{
+                  padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600,
+                  background: scanResult.status === 'completed' ? 'rgba(0,255,136,0.15)' : 
+                              scanResult.status === 'failed' ? 'rgba(255,77,109,0.15)' : 'rgba(255,255,255,0.1)',
+                  color: scanResult.status === 'completed' ? '#00ff88' : 
+                         scanResult.status === 'failed' ? '#ff4d6d' : 'var(--text-muted)',
+                  border: `1px solid ${scanResult.status === 'completed' ? '#00ff88' : 
+                                       scanResult.status === 'failed' ? '#ff4d6d' : 'var(--text-muted)'}`
+                }}>
+                  {scanResult.status.toUpperCase()}
+                </span>
+              </div>
             </div>
 
             {/* Tool tabs */}
@@ -144,9 +160,17 @@ export default function Dashboard() {
                     background: activeTab === tool ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.05)',
                     color: activeTab === tool ? '#000' : 'var(--text-muted)',
                     fontWeight: activeTab === tool ? 700 : 400,
-                    fontFamily: 'inherit'
+                    fontFamily: 'inherit',
+                    position: 'relative'
                   }}>
                   {tool.toUpperCase()}
+                  {isScanning && !scanResult.raw_output?.[tool] && (
+                    <span style={{ 
+                      width: '6px', height: '6px', background: '#ffcc00', 
+                      borderRadius: '50%', position: 'absolute', top: '5px', right: '5px',
+                      boxShadow: '0 0 5px #ffcc00'
+                    }}></span>
+                  )}
                 </button>
               ))}
             </div>
@@ -157,7 +181,7 @@ export default function Dashboard() {
                 {TOOL_LABELS[activeTab]}
               </h3>
               <div className="terminal-mode" style={{ minHeight: '300px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.82rem', lineHeight: '1.6' }}>
-                {scanResult.raw_output?.[activeTab] || `No output for ${activeTab}.`}
+                {scanResult.raw_output?.[activeTab] || (isScanning ? `Awaiting output from ${activeTab}...` : `No output for ${activeTab}.`)}
               </div>
             </div>
           </div>

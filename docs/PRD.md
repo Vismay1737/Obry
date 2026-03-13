@@ -19,13 +19,15 @@ Running security tools manually via the terminal can be cumbersome, especially w
 
 ## 5. Functional Requirements
 - **Target Input:** Support for Domain names and IP addresses.
-- **Concurrent Scanning:** Execute Nmap, Nikto, WhatWeb, and Subfinder simultaneously.
-- **Real-time Status:** Show a "running" state and polling mechanism to update the UI when tools finish.
+- **Two-Stage Scanning:** Execute Nmap and WhatWeb (Fast) in Stage 1, followed by Nikto and Subfinder (Deep) in Stage 2.
+- **Real-time Incremental Results:** Show fast results from Stage 1 immediately while deep scans continue in the background.
+- **Live Status Badges:** Visual indication (e.g., "LIVE UPDATING") when background tools are still active.
 - **Tabbed Results:** Clean separation of raw terminal outputs for each tool.
 - **Scan History:** Persistent storage of results in a NoSQL database.
 
 ## 6. Non-Functional Requirements
 - **Security:** Use encrypted SSH tunnels for remote payouts.
+- **Deep-Scan Stability:** Increased execution timeouts (600s) to ensure Nikto and Subfinder complete successfully on complex targets.
 - **Aesthetics:** "Hacker-style" dark mode UI with modern animations (Glassmorphism).
 - **Scalability:** Ability to separate the scanning engine (Kali) from the application server.
 

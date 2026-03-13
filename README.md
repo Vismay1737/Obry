@@ -1,73 +1,41 @@
-# OrbyTech - AI Cybersecurity Copilot
+# OrbyTech - Cybersecurity Copilot
 
-OrbyTech is an AI-powered cybersecurity platform featuring a modern Dark Hacker UI, automated vulnerability scanning (Nmap, Nikto, WhatWeb, Subfinder), and OpenAI-driven risk analysis and reporting.
+OrbyTech is a high-performance cybersecurity dashboard featuring a modern "Hacker UI," automated vulnerability scanning (Nmap, Nikto, WhatWeb, Subfinder), and secure orchestration with a remote Kali Linux environment via SSH.
 
 ## Project Structure
 
-- `/backend` - FastAPI Python server with tool integrations and MongoDB models.
-- `/frontend` - Next.js React client with custom dark glassmorphic styling.
+- `/backend` - FastAPI Python server with SSH orchestration and MongoDB persistence.
+- `/frontend` - Next.js React client with custom dark glassmorphic styling and real-time polling.
 
 ## Prerequisites
 
-To run this project, you need to have the following installed on your machine:
+To run this project, you need:
 - **Python 3.10+**
 - **Node.js (v18+)** and **npm**
-- **MongoDB** running locally or a MongoDB Atlas URI
-- The following security tools accessible via your system's `PATH`:
-  - `nmap`
-  - `nikto`
-  - `whatweb`
-  - `subfinder`
+- **MongoDB** (Local or Atlas URI)
+- **Kali Linux VM** (Accessible via SSH for remote command execution)
 
 ## Local Setup Instructions
 
 ### 1. Backend Setup (FastAPI)
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   # On Windows:
-   .\venv\Scripts\Activate.ps1
-   # On macOS/Linux:
-   source venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Create a `.env` file from the example:
-   ```bash
-   cp .env.example .env
-   ```
-   **Update the `.env` file** with your OpenAI API Key and MongoDB URL.
-5. Start the API server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+1. Navigate to the backend directory: `cd backend`
+2. Create and activate a virtual environment.
+3. Install dependencies: `pip install -r requirements.txt`
+4. Update `.env` with your SSH credentials for the Kali VM and your MongoDB URL.
+5. Start the API server: `uvicorn main:app --reload`
 
 ### 2. Frontend Setup (Next.js)
 
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. Install npm dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Next.js development server:
-   ```bash
-   npm run dev
-   ```
-4. Open your browser to `http://localhost:3000` to access the OrbyTech Dashboard.
+1. Navigate to the frontend directory: `cd frontend`
+2. Install npm dependencies: `npm install`
+3. Start the dev server: `npm run dev`
+4. Visit `http://localhost:3000`.
 
-## Features
+## Key Features
 
-- **Dark Hacker UI**: A visually stunning, high-contrast, glowing UI inspired by modern sci-fi interfaces.
-- **Microservice Orchestration**: Concurrently runs multiple standard cybersecurity tools against targets.
-- **AI Triage**: Parses raw CLI outputs from tools to generate a unified 0-100 Security Score.
-- **Reporting**: Clearly presents risks chronologically, categorized by severity, with actionable remediation instructions.
+- **Distributed Scanning Architecture**: Offloads heavy processing to a remote Kali Linux instance via encrypted SSH tunnels.
+- **Two-Stage Execution**: Delivers fast results (Nmap/WhatWeb) in seconds while background scans (Nikto/Subfinder) continue deeper analysis.
+- **Live Updating Dashboard**: Real-time polling updates the UI as tools complete their execution.
+- **Extended Deep Scans**: Configured with 10-minute timeouts to ensure comprehensive vulnerability discovery.
+- **Dark Hacker UI**: A visually stunning, high-contrast, glowing UI with Glassmorphic effects and terminal-style outputs.
