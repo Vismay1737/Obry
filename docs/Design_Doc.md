@@ -1,59 +1,54 @@
-# System Design Document - OrbyTech
+# System Design & Architecture - OrbyTech
 
-## 1. High-Level Architecture
-OrbyTech follows a distributed client-server architecture split into three distinct layers:
+## 1. High-Level Architecture Overview
 
-1. **Frontend (Next.js):** A React-based client that manages state, user input, and polling.
-2. **Backend (FastAPI):** A Python-based API gateway that manages the database and SSH orchestration.
-3. **Execution Engine (Kali Linux):** A dedicated Linux VM where the actual security binaries reside.
+OrbyTech implements a **Distributed, Zero-Trust Security Orchestration Model**. The frontend interacts with a central API gateway (FastAPI) via standard HTTP REST (for triggering) and WebSockets (for live streaming). The API gateway strictly validates all inputs before securely multiplexing SSH connections to a disposable / isolated Kali Linux Virtual Machine. 
+
+Finally, raw outputs are fed to a massive Large Language Model via NVIDIA NIM for Autonomous Remediation structuring.
+
+## 2. Component Diagram
 
 ```mermaid
-graph LR
-    User([User Browser]) <--> Frontend[Next.js App]
-    Frontend <--> Backend[FastAPI]
-    Backend <--> DB[(MongoDB Atlas)]
-    Backend -- SSH Tunnel (Port 2222) --> Kali[Kali Linux VM]
-    Kali -- Run Tools --> Target((Internet Target))
+graph TD
+    A[User / Browser] -->|HTTP POST /api/scan| B(FastAPI Backend)
+    A <-->|ws:// /ws/scan| B
+    
+    B -->|1. Input Validation| C{Sanitizer Module}
+    C -->|Command Injection Detected| Z[Block & Return 400]
+    C -->|SSRF Detected| Z
+    
+    C -->|Safe Target| D[AsyncSSH Multiplexer]
+    D -->|Persistent Tunnel| E((Kali Linux VM))
+    
+    E -->|Nmap| D
+    E -->|Nuclei| D
+    E -->|Nikto...| D
+    
+    D -.->|Async Iterable Streams| B
+    B -.->|WebSocket Broadcast| A
+    
+    D -->|Wait for EOF| F[Aggregate Raw Outputs]
+    F -->|Raw Text| G[NVIDIA NIM: Llama 3.1 405b]
+    
+    G -->|Structured JSON & Bash Scripts| H[(MongoDB Atlas)]
+    H -->|Fetch Report| A
 ```
 
-## 2. API Design
-- `POST /api/scan`: Initiates a new scan. Spawns a background task.
-- `GET /api/scans`: Returns a list of all historical scans.
-- `GET /api/scans/{id}`: Returns the detailed raw output for a specific scan.
+## 3. Core Architectural Upgrades
 
-## 3. Database Schema (MongoDB)
-**Collection: `scans`**
-```json
-{
-  "_id": "ObjectId",
-  "target": "string (IP or Domain)",
-  "status": "string (running/completed/failed)",
-  "created_at": "datetime",
-  "completed_at": "datetime",
-  "raw_output": {
-    "nmap": "string",
-    "nikto": "string",
-    "whatweb": "string",
-    "subfinder": "string",
-    "httpx": "string",
-    "nuclei": "string",
-    "amass": "string",
-    "katana": "string",
-    "gau": "string"
-  }
-}
-```
+### 3.1 Live Terminal Streaming (WebSocket)
+We moved away from REST polling while tests run. The SSH pipeline was refactored with an asynchronous generator (`while True: line = await stdout.readline()`) mapping directly to a FastAPI `@router.websocket` endpoint. This guarantees less than 50ms latency between a tool discovering an open port in the Kali VM and it rendering on the UI.
 
-## 4. Security Implementation
-- **SSH Encapsulation:** All commands sent from the backend to Kali are wrapped in an `asyncssh` session.
-- **Port Forwarding:** The backend connects to `127.0.0.1:2222`, which is mapped to the Kali VM's port 22 in VirtualBox NAT settings.
-- **SSH Multiplexing:** Share a single persistent connection across all 9 concurrent tools to eliminate connection lag (~20s saved/scan).
-- **Incremental Persistence:** Background worker updates the database as each tool finishes, providing real-time UI updates.
+### 3.2 Anti-SSRF & Command Injection Pipeline
+Because the application executes bash commands on a remote system (`nmap -sV {target}`), we implemented a Zero-Trust module:
+- Regular expressions actively drop inputs containing `;`, `|`, `&`, `$`, `` ` ``.
+- IP translation occurs prior to execution, and the backend halts if the resulting IP matches `127.0.0.0/8`, `192.168.0.0/16`, `10.0.0.0/8`, or AWS Metadata addresses.
 
-## 5. UI/UX Design System
-- **Theme:** Ultra-dark mode (#030305).
-- **Accents:** Neon Cyan (#00f3ff) for highlights and Success Green (#00ff88) for console outputs.
-- **Components:** 
-  - **Glassmorphism:** Using `backdrop-filter: blur` for panels to create depth.
-  - **Terminal View:** Using Monospace fonts and dark backgrounds for raw outputs.
-  - **Dynamic Sidebar/Tabs:** Instant switching between tool outputs without page reloads.
+### 3.3 Autonomous Remediation (JSON Structuring)
+Using prompt engineering, we forced Llama 3.1 405b to output pure, unformatted JSON containing a `remediation_script` property. The Next.js frontend detects this property and renders an interactive, copy-to-clipboard bash script directly inside the vulnerability card.
+
+## 4. UI/UX Design Language
+
+- **Cyberpunk Neo-Matrix Styling:** High contrast `#00ff41` against Deep Black `#030305`.
+- **CRT Scanlines:** A fixed CSS overlay simulates retro monitor distortions.
+- **Glassmorphism panels:** `backdrop-filter: blur(24px)` provides depth behind floating UI components and live terminals.

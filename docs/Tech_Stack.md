@@ -1,51 +1,44 @@
-# Technology Stack - OrbyTech
+# Technology Stack - OrbyTech Enterprise Architecture
 
 ## 1. Frontend Layer
 | Technology | Usage |
 | :--- | :--- |
-| **Next.js 14** | Core web framework with App Router support. |
-| **React** | Component-based UI logic and state management. |
-| **Vanilla CSS** | custom-built design system with Glassmorphism and CSS variables. |
-| **Google Fonts** | "Space Grotesk" for UI and "JetBrains Mono" for code. |
+| **Next.js 14 / React** | Core web framework with App Router support and state management. |
+| **WebSocket API** | Native browser `WebSocket` implementation for streaming live Kali logs. |
+| **Vanilla CSS** | Custom Cyberpunk design system featuring Neo-Matrix glowing effects and CRT scanlines. |
+| **Google Fonts** | "Plus Jakarta Sans" for UI and "JetBrains Mono" for code terminals. |
 
 ## 2. Backend Layer
 | Technology | Usage |
 | :--- | :--- |
-| **FastAPI** | Modern, fast ASGI framework for Python. |
-| **Uvicorn** | High-performance production server for the API. |
-| **AsyncSSH** | Asynchronous SSHv2 client library for remote command execution. |
-| **Pydantic v2** | Data parsing and validation for API models. |
-| **Python Dotenv** | Configuration and environment variable management. |
+| **FastAPI** | Modern, fast ASGI framework for Python, serving both HTTP and `ws://` endpoints. |
+| **Uvicorn** | High-performance asynchronous production server. |
+| **AsyncSSH** | Asynchronous SSH client library with iterative stream reading for live server output. |
+| **Pydantic v2** | Strict data parsing and validation for resolving exact JSON LLM outputs. |
+| **WebSockets** | Python `websockets` library for maintaining full-duplex persistent client connections. |
 
-### 2.1 Execution Architecture
-- **Concurrent Scanning:** All 9 security tools execute in parallel using SSH connection multiplexing. Results are saved incrementally as each tool finishes.
-- **Connection Multiplexing:** Share a single persistent SSH tunnel across all concurrent tasks to eliminate handshake overhead.
-- **Optimized Timeouts:** Individual tool caps (e.g., 180s for Nikto, 120s for Nuclei) ensure a fast and predictable user experience.
+### 2.1 Execution & Streaming Architecture
+- **Concurrent Scanning:** All 9 security tools execute in parallel using SSH connection multiplexing. 
+- **Live Event Broadcasting:** The backend captures `stdout` line-by-line using asynchronous generators and pushes the payload directly to connected frontend clients via WebSockets.
+- **Zero-Trust Input Validation:** Custom backend sanitizers parse target domains/IPs, stripping bash metacharacters and blocking private routing addresses (SSRF mitigation).
 
 ## 3. Data Storage
 | Technology | Usage |
 | :--- | :--- |
-| **MongoDB Atlas** | Cloud-native NoSQL database for persistent storage of scan history and raw outputs. |
-| **Motor** | Non-blocking, asynchronous driver for MongoDB in Python. |
+| **MongoDB Atlas** | Cloud-native NoSQL database to persist scan history, raw logs, and structured AI results. |
+| **Motor** | Non-blocking, asynchronous driver for MongoDB. |
+| **Certifi** | Provides Mozilla's CA Bundle to securely validate MongoDB TLS/SSL connections on Windows environments. |
 
-## 4. Security Toolchain (9 Tools)
+## 4. Security Toolchain & AI
 | Tool | Purpose | Status |
 | :--- | :--- | :--- |
-| **Nmap** | Port scanning and service discovery. | Active |
-| **WhatWeb** | Web technology and CMS fingerprinting. | Active |
-| **HTTPX** | Probing alive domains and tech stacks. | Active |
-| **Subfinder** | Passive subdomain enumeration. | Active |
-| **Amass** | Deep subdomain enum and DNS mapping. | Active |
-| **GAU** | Fetching known URLs from web archives. | Active |
-| **Nikto** | Web server vulnerability scanning. | Active |
-| **Nuclei** | Template-based vulnerability assessment. | Active |
-| **Katana** | Advanced website crawling and parsing. | Active |
-| **AI Copilot** | Log synthesis and remediation analysis (GPT-4/Llama). | Active |
+| **Nmap, HTTPX, Nuclei...** | The 9-suite Kali Linux intelligence gathering toolkit. | Active / Multiplexed |
+| **NVIDIA NIM API** | Hosts the `meta/llama-3.1-405b-instruct` model for inference. | Active |
+| **Autonomous Remediation** | Generates exact `bash`, `ufw`, or `docker` scripts to auto-patch discovered vulnerabilities. | Active |
 
 ## 5. Development & DevOps
 | Technology | Usage |
 | :--- | :--- |
-| **Pip/Venv** | Python dependency and environment management. |
-| **NPM** | Node.js package management. |
-| **Git/GitHub** | Version control and collaboration. |
+| **Pip/Venv & NPM** | Backend and Frontend environments. |
 | **VirtualBox** | Locally hosted Kali Linux virtualization. |
+| **Powershell** | Local Windows development environment execution. |

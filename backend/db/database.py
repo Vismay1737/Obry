@@ -7,8 +7,10 @@ class Database:
 
 db_instance = Database()
 
+import certifi
+
 async def connect_to_mongo():
-    db_instance.client = AsyncIOMotorClient(settings.MONGODB_URL)
+    db_instance.client = AsyncIOMotorClient(settings.MONGODB_URL, tlsCAFile=certifi.where())
     db_instance.db = db_instance.client[settings.DATABASE_NAME]
     print("Connected to MongoDB")
 

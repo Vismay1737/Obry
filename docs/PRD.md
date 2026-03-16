@@ -1,37 +1,25 @@
-# Product Requirements Document (PRD) - OrbyTech
+# Product Requirements Document (PRD) - OrbyTech v1.0
 
-## 1. Project Overview
-**OrbyTech** is a cybersecurity dashboard designed to simplify the process of running industry-standard security scans. It provides a centralized, modern interface for executing Kali Linux tools and viewing their raw outputs in real-time.
+## 1. Product Vision
+OrbyTech aims to democratize enterprise-grade cybersecurity by providing an AI Copilot that not only orchestrates complex Kali Linux penetration testing tools but also autonomously writes the scripts required to patch the vulnerabilities it discovers.
 
-## 2. Problem Statement
-Running security tools manually via the terminal can be cumbersome, especially when orchestrating multiple tools (Nmap, Nikto, etc.) across different environments. Users need a way to trigger these scans from a web interface and view consolidated results without managing multiple terminal windows.
+## 2. Target Audience
+- Security Enthusiasts / Hackathon Judges.
+- DevSecOps Engineers looking to drastically reduce the time between vulnerability discovery and patching.
+- System Administrators seeking a centralized, beautiful dashboard for security posturing.
 
-## 3. Goals & Objectives
-- **Centralized Dashboard:** A single UI to trigger scans across multiple security tools concurrently.
-- **Remote Execution:** Leverage an isolated Kali Linux environment for heavy-duty scanning via secure SSH tunneling.
-- **Historical Tracking:** Store and retrieve past scan results for comparison and auditing.
-- **Educational Value:** Provide context on what each tool does to help users understand the scanning process.
+## 3. Core Features (Implemented)
 
-## 4. User Personas
-- **Security Enthusiasts:** Individuals learning penetration testing.
-- **System Administrators:** Users wanting a quick health check of their network perimeter.
-- **Developers:** Building secure applications who want to verify their public-facing services.
+### 3.1 The Hackathon Core
+- **Integrated Kali Scanner:** 9 fully integrated tools running securely over SSH (Nmap, WhatWeb, HTTPX, Subfinder, Amass, GAU, Nikto, Nuclei, Katana).
+- **Cyberpunk Live Dashboard:** A Next.js frontend featuring WebSockets that stream the raw terminal output from Kali directly to the user's browser in real-time.
+- **Autonomous Remediation:** Utilizing Llama 3.1 405b to read the logs and generate precise copy-and-paste scripts (Bash/UFW/Terraform) to fix discovered vulnerabilities immediately.
 
-## 5. Functional Requirements
-- **Target Input:** Support for Domain names and IP addresses.
-- **Concurrent Scanning Suite:** Execute 9 industrial tools (Nmap, WhatWeb, HTTPX, Subfinder, Amass, GAU, Nikto, Nuclei, Katana) in parallel.
-- **Real-time Live Streaming:** Update the dashboard incrementally as each tool finishes via non-blocking database persistence.
-- **Live Status Badges:** Visual indication (e.g., "LIVE UPDATING") when background tools are still active.
-- **Tabbed Results:** Clean separation of raw terminal outputs for each tool.
-- **Scan History:** Persistent storage of results in a NoSQL database.
+### 3.2 Security & Compliance
+- **Zero-Trust Validation:** The platform protects itself from its users. Anti-Command Injection and Anti-SSRF routing modules guarantee that users cannot attack the backend server or the internal network.
+- **TLS/SSL Datastores:** Safe storage of previous reports in MongoDB Atlas relying on `certifi` CA validation.
 
-## 6. Non-Functional Requirements
-- **Security:** Use multiplexed encrypted SSH tunnels for remote orchestration.
-- **Optimized Performance:** Tool-specific timeouts (120s-180s) and SSH connection sharing for zero-lag scanning.
-- **Aesthetics:** "Hacker-style" dark mode UI with modern animations (Glassmorphism).
-- **Scalability:** Ability to separate the scanning engine (Kali) from the application server.
-
-## 7. Current Implementation Status
-- **AI Analysis:** Fully functional. Uses an LLM to analyze the 9 integrated scan results.
-- **Full Tool Suite:** All 9 tools are integrated and functional on the remote Kali node.
-- **PDF Reports:** Planned for Phase 1 of post-hackathon roadmap.
+## 4. Out of Scope (For Post-Hackathon)
+- **Automated Scheduling:** Running cron job scans automatically every week.
+- **Click-to-Patch Action:** Allowing the dashboard to automatically SSH into the target web server and run the generated remediation script without human intervention.
+- **Multi-tenant Authentication:** User logins to isolate scan histories.

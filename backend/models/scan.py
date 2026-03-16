@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 
 class Vulnerability(BaseModel):
     title: str
-    severity: str # high, medium, low
+    severity: str # critical, high, medium, low
     description: str
     recommendation: str
+    remediation_script: Optional[str] = None
 
 class ScanRequest(BaseModel):
     target: str

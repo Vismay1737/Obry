@@ -13,3 +13,5 @@ torch
 
 transformers  
 accelerate 
+langchain
+langchain-nvidia-ai-endpoints

@@ -6,7 +6,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-async def run_command_local(cmd: str) -> str:
+async def run_command_local(cmd: str, callback=None) -> str:
     """Helper to run a shell command asynchronously and capture output locally."""
     try:
         process = await asyncio.create_subprocess_shell(
@@ -14,14 +14,24 @@ async def run_command_local(cmd: str) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        # Add a global timeout for the whole command execution
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=600.0)
+        stdout_data = ""
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            decoded_line = line.decode(errors='replace')
+            stdout_data += decoded_line
+            if callback:
+                await callback(decoded_line)
+                
+        await process.wait()
         
         if process.returncode != 0:
-            err_msg = stderr.decode()
+            stderr_data = (await process.stderr.read()).decode(errors='replace')
+            err_msg = stderr_data
             logger.error(f"Command '{cmd}' failed with error: {err_msg}")
             return f"Error running command (Exit {process.returncode}): {err_msg}"
-        return stdout.decode()
+        return stdout_data
     except asyncio.TimeoutError:
         logger.error(f"Local command '{cmd}' timed out after 600s")
         return "Error: Command execution timed out after 600 seconds."
@@ -29,7 +39,7 @@ async def run_command_local(cmd: str) -> str:
         logger.error(f"Exception running command '{cmd}': {e}")
         return str(e)
 
-async def run_command_ssh(cmd: str, conn=None) -> str:
+async def run_command_ssh(cmd: str, conn=None, callback=None) -> str:
     """Helper to run a shell command on an external Kali VM over SSH."""
     if not settings.KALI_HOST or not settings.KALI_USER or not settings.KALI_PASSWORD:
         return "Error: SSH credentials for Kali Linux are not fully configured in the .env file."
@@ -41,27 +51,38 @@ async def run_command_ssh(cmd: str, conn=None) -> str:
 
     try:
         logger.info(f"Running SSH command: {cmd}")
-        # Use existing connection if provided, otherwise connect
+        # Prepend go bin to PATH to prioritize newer tool versions
+        full_command = f"export PATH=$HOME/go/bin:/usr/local/go/bin:$PATH; {cmd}"
+        
+        async def stream_output(connection):
+            async with connection.create_process(full_command) as process:
+                stdout_data = ""
+                async for line in process.stdout:
+                    stdout_data += line
+                    if callback:
+                        await callback(line)
+                await process.wait()
+                if process.returncode != 0:
+                    stderr_data = await process.stderr.read()
+                    logger.error(f"SSH Command '{cmd}' failed. Stderr: {stderr_data}")
+                    return f"Error running command: {stderr_data or stdout_data}"
+                return stdout_data
+
         if conn:
-            # Prepend go bin to PATH to prioritize newer tool versions
-            full_command = f"export PATH=$HOME/go/bin:/usr/local/go/bin:$PATH; {cmd}"
-            result = await conn.run(full_command, check=False, timeout=600.0)
+            return await stream_output(conn)
         else:
             async with asyncssh.connect(host, port=port, username=user, password=password, known_hosts=None) as new_conn:
-                full_command = f"export PATH=$HOME/go/bin:/usr/local/go/bin:$PATH; {cmd}"
-                result = await new_conn.run(full_command, check=False, timeout=600.0) 
-            
-        if result.exit_status != 0:
-            logger.error(f"SSH Command '{cmd}' failed (Exit {result.exit_status}). Stderr: {result.stderr}")
-            return f"Error running command: {result.stderr or result.stdout}"
-        logger.info(f"SSH command '{cmd}' completed successfully.")
-        return result.stdout
-    except asyncio.TimeoutError:
-        logger.error(f"SSH command '{cmd}' timed out after 600s")
-        return "Error: Remote command execution timed out after 600 seconds."
+                return await stream_output(new_conn)
+                
     except Exception as e:
         logger.error(f"SSH Exception running command '{cmd}': {e}")
         return f"SSH connection failed: {str(e)}"
+
+async def run_command(cmd: str, conn=None, callback=None) -> str:
+    """Route command execution based on configuration."""
+    if settings.KALI_HOST:
+        return await run_command_ssh(cmd, conn=conn, callback=callback)
+    return await run_command_local(cmd, callback=callback)
 
 async def run_command(cmd: str, conn=None) -> str:
     """Route command execution based on configuration."""
@@ -73,12 +94,15 @@ class ScannerService:
     @staticmethod
     async def run_nmap(target: str, conn=None) -> str:
         logger.info(f"Starting Nmap for {target}")
-        return await run_command(f"nmap -F {target}", conn=conn)
+        # Strip scheme for nmap target
+        host = target.split("://")[-1].split("/")[0]
+        # Run a comprehensive scan: Service versioning, default scripts, all ports, with aggressive timing
+        return await run_command(f"nmap -sV -sC -T4 -p- {host}", conn=conn)
 
     @staticmethod
     async def run_whatweb(target: str, conn=None) -> str:
         logger.info(f"Starting WhatWeb for {target}")
-        return await run_command(f"whatweb {target}", conn=conn)
+        return await run_command(f"whatweb -v -a 3 {target}", conn=conn)
 
     @staticmethod
     async def run_subfinder(target: str, conn=None) -> str:
@@ -98,7 +122,7 @@ class ScannerService:
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", domain):
             return "Skipping subfinder (target is an IP address, not a domain)."
             
-        return await run_command(f"subfinder -d {domain} -silent", conn=conn)
+        return await run_command(f"subfinder -d {domain} -silent -all", conn=conn)
 
     @staticmethod
     async def run_nikto(target: str, conn=None) -> str:
@@ -110,24 +134,22 @@ class ScannerService:
         else:
             hostname = target.split("/")[0].split(":")[0]
 
-        # -Tuning 1: Interesting files
         # -evasion 1: Random URL encoding
         ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        # Reduced maxtime to 180s and simplified for speed
-        return await run_command(f'nikto -h {hostname} -Tuning 1 -maxtime 180s -nointeractive -evasion 1 -useragent "{ua}" -Ignore404', conn=conn)
+        # Removed Tuning for a fuller default scan to get real, substantial output. Maxtime increased for full evaluation.
+        return await run_command(f'nikto -h {hostname} -maxtime 300s -nointeractive -evasion 1 -useragent "{ua}" -Ignore404', conn=conn)
 
     @staticmethod
     async def run_httpx(target: str, conn=None) -> str:
         logger.info(f"Starting HTTPX for {target}")
-        # Add timeout and simplify to avoid hangs
-        return await run_command(f"httpx -u {target} -title -status-code -silent -timeout 5 -retries 0", conn=conn)
+        # Added -tech-detect for much deeper fingerprinting
+        return await run_command(f"httpx -u {target} -title -status-code -tech-detect -silent -timeout 5 -retries 0", conn=conn)
 
     @staticmethod
     async def run_nuclei(target: str, conn=None) -> str:
         logger.info(f"Starting Nuclei for {target}")
-        # Nuclei can be slow, but we'll use a silent fast scan
-        # Use 'timeout' utility for tools that don't have native maxtime
-        return await run_command(f"timeout 120s nuclei -u {target} -silent -severity low,medium,high,critical -timeout 5", conn=conn)
+        # Extract templates for more specific, complex queries
+        return await run_command(f"timeout 300s nuclei -u {target} -t cves/ -t vulnerabilities/ -t misconfiguration/ -t exposures/ -silent -severity low,medium,high,critical", conn=conn)
 
     @staticmethod
     async def run_amass(target: str, conn=None) -> str:

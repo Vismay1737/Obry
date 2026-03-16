@@ -1,71 +1,59 @@
-import torch
-import transformers
 import logging
 from core.config import settings
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 
 class AIService:
-    _pipeline = None
+    _llm = None
 
     @classmethod
-    def get_pipeline(cls):
-        if not settings.USE_REAL_AI:
-            return "MOCK"
+    def get_llm(cls):
+        # Always use the API Key if available, regardless of USE_REAL_AI variable
+        if not settings.NVIDIA_API_KEY:
+             return "MOCK"
 
-        if cls._pipeline is None:
-            model_id = "vanessasml/cyber-risk-llama-3-8b"
+        if cls._llm is None:
             try:
-                logger.info(f"Initializing AI Model: {model_id}...")
-                
-                # Detect best torch dtype
-                if torch.cuda.is_available():
-                    device = "cuda"
-                    try:
-                        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                    except Exception:
-                        dtype = torch.float16
-                else:
-                    device = "cpu"
-                    dtype = torch.float32
-
-                # Add timeout and attempt to load model with simplified parameters
-                cls._pipeline = transformers.pipeline(
-                    "text-generation",
-                    model=model_id,
-                    model_kwargs={"torch_dtype": dtype, "low_cpu_mem_usage": True},
-                    device_map="auto" if device == "cuda" else None,
-                    device=None if device == "cuda" else 0 if device == "cpu" else None
+                # Initialize the ChatNVIDIA client using the provided key
+                cls._llm = ChatNVIDIA(
+                    model="meta/llama-3.1-405b-instruct", 
+                    api_key=settings.NVIDIA_API_KEY, 
+                    temperature=0.2,
+                    top_p=0.7,
+                    max_tokens=1024
                 )
-                logger.info(f"AI Model initialized successfully.")
+                logger.info("Successfully connected to NVIDIA NIM endpoints.")
             except Exception as e:
-                logger.error(f"Failed to initialize AI model: {e}")
-                cls._pipeline = "MOCK" # Marker for mock fallback
-        return cls._pipeline
+                logger.error(f"Failed to initialize NVIDIA NIM model: {e}")
+                cls._llm = "MOCK"
+        return cls._llm
 
     @classmethod
-    async def analyze_results(cls, target: str, raw_results: dict) -> str:
-        pipeline = cls.get_pipeline()
+    async def analyze_results_dict(cls, target: str, raw_results: dict) -> dict:
+        import json
+        llm = cls.get_llm()
         
-        # Prepare a comprehensive prompt based on the tool outputs
+        # We can increase the character limit now because the Llama 3.1 405B has a huge context window
         context = f"Target Website: {target}\n\n"
         for tool, output in raw_results.items():
             if not output: continue
-            tool_summary = output[:800] 
+            tool_summary = output[:2500] 
             context += f"--- {tool.upper()} OUTPUT ---\n{tool_summary}\n\n"
 
-        if pipeline == "MOCK":
-            return f"""[FALLBACK AI ANALYSIS FOR {target}]
-The AI model was unable to load due to hardware constraints. Here is a baseline heuristic assessment:
-1. SUMMARY: The target {target} was scanned using Nmap and Nikto. Open ports and services identify potential attack surfaces.
-2. RISKS: 
-   - Port 80/443: Web servers are visible; ensure all software is patched to latest versions.
-   - Information Disclosure: Tool logs indicate technology fingerprints (see WhatWeb tab).
-   - Configuration: Nikto checks identified potential misconfigurations (see Nikto tab).
-3. REMEDIATION: Review the detailed logs in the 'Nmap' and 'Nikto' tabs to specifically address identified version numbers and vulnerabilities."""
-
-        if not pipeline:
-            return "AI Analysis is currently unavailable (Model failed to initialize)."
+        if llm == "MOCK":
+            return {
+                "ai_analysis": f"[MOCK AI] The target {target} was scanned. Ports 80/443 visible.",
+                "security_score": 85,
+                "vulnerabilities": [{
+                    "title": "Mock Open Network Services",
+                    "severity": "medium",
+                    "description": "Port scanning identified exposed services on the target machine.",
+                    "recommendation": "Close unused ports and implement a strict firewall policy.",
+                    "remediation_script": "#!/bin/bash\n# Example UFW Firewall Remediation\nsudo ufw default deny incoming\nsudo ufw allow 80/tcp\nsudo ufw allow 443/tcp\nsudo ufw enable"
+                }]
+            }
 
         try:
             prompt_content = f"""
@@ -73,54 +61,57 @@ The AI model was unable to load due to hardware constraints. Here is a baseline 
             
             {context}
             
-            Please provide:
-            1. A high-level security summary.
-            2. Top 3 critical vulnerabilities or exposures identified.
-            3. Actionable remediation steps for the web administrator.
-            
-            Keep the tone professional and the advice practical.
+            Return ONLY a valid JSON object containing exactly these fields (do not wrap in markdown ```json blocks, just return raw JSON):
+            {{
+                "ai_analysis": "A high-level executive summary of the security posture.",
+                "security_score": integer (0 to 100) representing overall security health,
+                "vulnerabilities": [
+                    {{
+                        "title": "Title of the vulnerability",
+                        "severity": "critical" | "high" | "medium" | "low",
+                        "description": "Detailed explanation of the flaw based on tool output",
+                        "recommendation": "Step-by-step advice to fix the issue",
+                        "remediation_script": "Exact bash, terraform, docker, nginx.conf, or kubectl command block to automatically fix this vulnerability. Leave as empty string if a script is impossible. Include comments in the script explaining the fix."
+                    }}
+                ]
+            }}
             """
 
             messages = [
-                {"role": "system", "content": "You are a professional cybersecurity auditor from a leading security firm."},
-                {"role": "user", "content": prompt_content},
+                SystemMessage(content="You are a professional cybersecurity auditor analyzing Kali Linux outputs. Output raw JSON ONLY. No yapping. No markdown formatting. Only raw JSON object."),
+                HumanMessage(content=prompt_content)
             ]
 
-            prompt = pipeline.tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
-
-            terminators = [
-                pipeline.tokenizer.eos_token_id,
-                pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-            ]
-
-            outputs = pipeline(
-                prompt,
-                max_new_tokens=800,
-                eos_token_id=terminators,
-                do_sample=True,
-                temperature=0.1,
-                top_p=0.9,
-            )
+            response = llm.invoke(messages)
+            text_resp = response.content.strip()
             
-            analysis = outputs[0]["generated_text"][len(prompt):]
-            return analysis.strip()
+            # Strip markdown backticks just in case the LLM disobeys
+            if text_resp.startswith("```json"):
+                text_resp = text_resp[7:]
+            elif text_resp.startswith("```"):
+                text_resp = text_resp[3:]
+            if text_resp.endswith("```"):
+                text_resp = text_resp[:-3]
+                
+            return json.loads(text_resp.strip())
+
         except Exception as e:
-            logger.error(f"Error during AI analysis: {e}")
-            return f"Error generating AI analysis: {str(e)}"
+            logger.error(f"Error during AI JSON analysis: {e}")
+            return {
+                "ai_analysis": f"Error parsing AI response or calling NIM API: {str(e)}",
+                "security_score": 0,
+                "vulnerabilities": []
+            }
 
     @classmethod
     async def consult(cls, target: str, raw_results: dict, user_query: str) -> str:
-        pipeline = cls.get_pipeline()
-        if not pipeline:
-            return "AI Copilot is offline."
+        llm = cls.get_llm()
+        if llm == "MOCK" or not llm:
+            return "AI Copilot is offline (NVIDIA API key required)."
 
         context = f"Target Website: {target}\n\n"
         for tool, output in raw_results.items():
-            tool_summary = output[:800] if output else "No output."
+            tool_summary = output[:2500] if output else "No output."
             context += f"--- {tool.upper()} OUTPUT ---\n{tool_summary}\n\n"
 
         prompt_content = f"""
@@ -129,22 +120,16 @@ The AI model was unable to load due to hardware constraints. Here is a baseline 
         Context regarding {target}:
         {context}
         
-        Answer the user's question based on the security context provided above.
+        Answer the user's question based strictly on the security context provided above.
         """
 
         messages = [
-            {"role": "system", "content": "You are Orby, the Cybersecurity AI Copilot. Use the scan context to answer user questions about security risks."},
-            {"role": "user", "content": prompt_content},
+            SystemMessage(content="You are Orby, the Cybersecurity AI Copilot. Use the scan context to answer user questions about security risks."),
+            HumanMessage(content=prompt_content)
         ]
 
         try:
-            prompt = pipeline.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            outputs = pipeline(
-                prompt,
-                max_new_tokens=400,
-                do_sample=True,
-                temperature=0.2,
-            )
-            return outputs[0]["generated_text"][len(prompt):].strip()
+            response = llm.invoke(messages)
+            return response.content.strip()
         except Exception as e:
             return f"Consultation error: {str(e)}"

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # AI Configuration
     USE_REAL_AI: bool = os.getenv("USE_REAL_AI", "false").lower() == "true"
+    NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
 
     model_config = SettingsConfigDict(env_file=".env")
 

@@ -1,55 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
-const API_BASE = '/api'
-
-const TOOLS = ['nmap', 'whatweb', 'httpx', 'nuclei', 'amass', 'subfinder', 'katana', 'gau', 'nikto', 'ai']
-const TOOL_LABELS = {
-  nmap: '🔍 Nmap — Port Scanner',
-  whatweb: '🌐 WhatWeb — Tech Fingerprint',
-  httpx: '🚀 HTTPX — Live Domains/Tech',
-  nuclei: '🎯 Nuclei — Vulnerability Scan',
-  amass: '🏗️ Amass — Passive Enum',
-  subfinder: '📡 Subfinder — Subdomain Enum',
-  katana: '🗡️ Katana — Web Crawler',
-  gau: '🧹 GAU — Hidden Endpoints',
-  nikto: '🛡️ Nikto — Web Scraper',
-  ai: '🤖 AI Copilot — Security Analysis'
-}
+const API_BASE = 'http://localhost:8000/api'
+const WS_BASE = 'ws://localhost:8000/ws'
 
 export default function Dashboard() {
   const [target, setTarget] = useState('')
   const [isScanning, setIsScanning] = useState(false)
   const [scanId, setScanId] = useState(null)
   const [scanResult, setScanResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('nmap')
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
-  const [user, setUser] = useState(true) // Default to true to allow access without login
+  const [liveLogs, setLiveLogs] = useState([])
+  
+  const terminalRef = useRef(null)
+  const wsRef = useRef(null)
+  const pollIntervalRef = useRef(null)
 
-  // Poll for results when scan is running
+  // Auto-scroll terminal
   useEffect(() => {
-    if (!scanId || !isScanning || showHistory) return
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/scans/${scanId}`)
-        const data = await res.json()
-        
-        // Only update if we are not currently looking at history
-        if (!showHistory) {
-          setScanResult(data)
-        }
-        
-        if (data.status === 'completed' || data.status === 'failed') {
-          setIsScanning(false)
-          clearInterval(interval)
-        }
-      } catch (e) {}
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [scanId, isScanning, showHistory])
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+    }
+  }, [liveLogs])
 
   const loadHistory = async () => {
     try {
@@ -74,164 +49,194 @@ export default function Dashboard() {
     setScanResult(null)
     setScanId(null)
     setShowHistory(false)
+    setLiveLogs(['> Connection established. Synchronizing engines...'])
 
     try {
       const res = await fetch(`${API_BASE}/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target })
+        body: JSON.stringify({ target: target.trim() })
       })
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      
       const data = await res.json()
-      setScanId(data._id || data.id)
+      if (!res.ok) {
+        throw new Error(data.detail || `Server error: ${res.status}`)
+      }
+      
+      const newScanId = data._id || data.id
+      setScanId(newScanId)
+
+      // Initialize WebSocket
+      if (wsRef.current) wsRef.current.close()
+      const ws = new WebSocket(`${WS_BASE}/scan/${newScanId}`)
+      wsRef.current = ws
+
+      ws.onmessage = (event) => {
+        try {
+          const wsData = JSON.parse(event.data)
+          const logText = wsData.log.trim()
+          if (logText) {
+            setLiveLogs(prev => [...prev, `[${wsData.tool}] > ${logText}`])
+          }
+        } catch (err) {}
+      }
+
+      // Initialize Polling
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const checkRes = await fetch(`${API_BASE}/scans/${newScanId}`)
+          const scanData = await checkRes.json()
+          
+          if (scanData.status === 'completed' || scanData.status === 'failed') {
+            clearInterval(pollIntervalRef.current)
+            if (wsRef.current) wsRef.current.close()
+            setIsScanning(false)
+            setScanResult(scanData)
+            
+            if (scanData.status === 'failed') {
+               setError('Scan failed: ' + (scanData.ai_analysis || scanData.error || 'Unknown Error'))
+            }
+          }
+        } catch (e) {}
+      }, 5000)
+
     } catch (err) {
       setError(`Failed to start scan: ${err.message}`)
       setIsScanning(false)
+      setLiveLogs([])
     }
+  }
+
+  const handleCopyScript = (scriptText) => {
+    navigator.clipboard.writeText(scriptText)
   }
 
   return (
     <div className="container">
+      <div className="bg-blobs">
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+        <div className="blob blob-3"></div>
+      </div>
+
       <header className="header">
         <div className="ai-orb-container">
           <div className="ai-orb"></div>
         </div>
         <h1>OrbyTech Copilot</h1>
         {isScanning && (
-          <div className="searching-pill">
-            <span className="spinner-small"></span>
+          <div className="searching-pill" style={{ color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+            <span className="spinner-small" style={{ display: 'inline-block', width: '20px', height: '20px', border: '2px solid rgba(0,243,255,0.3)', borderTopColor: 'var(--accent-cyan)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span>
             <span>Orby AI is scanning {target}</span>
-            <span className="pulse-dot"></span>
           </div>
         )}
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '1rem', marginBottom: '1rem' }}>
-          Kali Linux Pro Toolkit — Nmap · Nuclei · HTTPX · Amass · Katana · GAU · Nikto
-        </p>
-        <form className="scanner-input-container" onSubmit={handleScan}>
+        <form className="scanner-input-container" onSubmit={handleScan} style={{ maxWidth: '700px', width: '100%', margin: '40px auto 0', display: 'flex', gap: '12px', padding: '8px', background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(10px)', borderRadius: '20px', border: '1px solid var(--glass-border)' }}>
           <input
             type="text"
             className="scanner-input"
+            style={{ flex: 1, background: 'transparent', border: 'none', padding: '16px 24px', borderRadius: '12px', color: '#fff', fontSize: '1.1rem', outline: 'none' }}
             placeholder="Enter IP, Domain, or URL to scan..."
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             disabled={isScanning}
           />
-          <button type="submit" className="glow-btn" disabled={isScanning || !target}>
-            {isScanning ? 'Scanning...' : 'Initiate'}
+          <button type="submit" className="glow-btn" disabled={isScanning || !target} style={{ background: '#fff', color: '#030305', border: 'none', padding: '0 32px', borderRadius: '14px', fontWeight: 700, cursor: isScanning ? 'not-allowed' : 'pointer' }}>
+            {isScanning ? 'Scanning...' : 'Initiate Scan'}
           </button>
-          <button type="button" className="glow-btn" style={{ background: 'transparent', border: '1px solid var(--card-border)', color: 'var(--text-main)' }}
+          <button type="button" className="glow-btn" 
+            style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid var(--glass-border)', padding: '0 32px', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}
             onClick={loadHistory} disabled={isScanning}>
-            History
+             History
           </button>
         </form>
       </header>
 
-      <main>
+      <main style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
         {error && (
-          <div className="glass-panel" style={{ borderColor: '#ff4d6d', color: '#ff4d6d' }}>
+          <div className="glass-panel" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', padding: '20px', borderRadius: '16px', border: '1px solid var(--danger)', backgroundColor: 'rgba(255,42,85,0.1)' }}>
             ⚠️ {error}
           </div>
         )}
 
-        {isScanning && !scanResult?.raw_output && (
-          <div className="glass-panel" style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <h2 className="typing-indicator" style={{ color: 'var(--accent-cyan)' }}>
-              Preparing Security Tools for {target}
+        {isScanning && !scanResult && (
+          <div className="glass-panel" style={{ padding: '60px 40px', background: 'var(--glass-bg)', backdropFilter: 'blur(24px)', border: '1px solid var(--glass-border)', borderRadius: '32px' }}>
+            <h2 className="typing-indicator" style={{ color: 'var(--accent-cyan)', marginBottom: '20px' }}>
+              Neural Network analyzing asset footprint...
             </h2>
-            <div className="terminal-mode" style={{ marginTop: '20px', textAlign: 'left' }}>
-              <p>{'>'} Spawning nmap stealth port scan...</p>
-              <p>{'>'} Fingerprinting tech with WhatWeb & HTTPX...</p>
-              <p>{'>'} Enumerating subdomains with Amass & Subfinder...</p>
-              <p>{'>'} Crawling paths with Katana & discovering endpoints with GAU...</p>
-              <p>{'>'} Preparing deep vulnerability scans with Nuclei & Nikto...</p>
+            <div 
+              ref={terminalRef}
+              className="terminal-mode" 
+              style={{ 
+                fontFamily: "'JetBrains Mono', monospace", background: 'rgba(0, 0, 0, 0.4)', padding: '32px', borderRadius: '24px', color: 'var(--success)', fontSize: '0.9rem', 
+                height: '400px', overflowY: 'auto', border: '1px solid var(--glass-border)', textAlign: 'left' 
+              }}>
+              {liveLogs.map((log, idx) => (
+                <p key={idx} style={{ margin: '4px 0', wordBreak: 'break-all' }}>{log}</p>
+              ))}
             </div>
           </div>
         )}
 
-        {scanResult && (
-          <div className="glass-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <h2 style={{ color: 'var(--accent-cyan)' }}>Scan Results: {scanResult.target}</h2>
-                {isScanning && scanResult.raw_output?.nmap && !scanResult.raw_output?.nikto && (
-                  <p style={{ color: '#ffcc00', fontSize: '0.85rem' }}>
-                    🚀 Stage 1 Complete. Initiating Deep Scan (Nikto & Subfinder)...
-                  </p>
-                )}
+        {scanResult && scanResult.status === 'completed' && (
+          <div className="results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+            <div className="glass-panel score-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '32px' }}>
+              <h3 style={{ color: 'var(--text-muted)' }}>Security Score</h3>
+              <div className="score-circle" style={{ width: '180px', height: '180px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', fontWeight: 700, border: '4px solid var(--accent-cyan)', boxShadow: '0 0 30px rgba(0, 243, 255, 0.2) inset, 0 0 30px rgba(0, 243, 255, 0.2)', textShadow: '0 0 10px var(--accent-cyan)' }}>
+                {scanResult.security_score ?? '--'}
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {isScanning && (
-                  <span style={{
-                    padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600,
-                    background: 'rgba(0,195,255,0.15)', color: 'var(--accent-cyan)', border: '1px solid var(--accent-cyan)'
-                  }}>
-                    LIVE UPDATING...
-                  </span>
-                )}
-                <span style={{
-                  padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600,
-                  background: scanResult.status === 'completed' ? 'rgba(0,255,136,0.15)' : 
-                              scanResult.status === 'failed' ? 'rgba(255,77,109,0.15)' : 'rgba(255,255,255,0.1)',
-                  color: scanResult.status === 'completed' ? '#00ff88' : 
-                         scanResult.status === 'failed' ? '#ff4d6d' : 'var(--text-muted)',
-                  border: `1px solid ${scanResult.status === 'completed' ? '#00ff88' : 
-                                       scanResult.status === 'failed' ? '#ff4d6d' : 'var(--text-muted)'}`
-                }}>
-                  {scanResult.status.toUpperCase()}
-                </span>
+              <div className="ai-analysis" style={{ fontSize: '1.1rem', lineHeight: 1.6, color: 'var(--text-muted)', marginTop: '20px' }}>
+                <strong style={{ color: 'var(--accent-cyan)', display: 'block', marginBottom: '10px' }}>AI Summary:</strong>
+                <p>{scanResult.ai_analysis}</p>
               </div>
             </div>
 
-            {/* Tool tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              {TOOLS.map(tool => (
-                <button key={tool} onClick={() => setActiveTab(tool)}
-                  style={{
-                    padding: '8px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                    background: activeTab === tool ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.05)',
-                    color: activeTab === tool ? '#000' : 'var(--text-muted)',
-                    fontWeight: activeTab === tool ? 700 : 400,
-                    fontFamily: 'inherit',
-                    position: 'relative',
-                    border: tool === 'ai' ? '1px solid rgba(0, 243, 255, 0.3)' : 'none'
-                  }}>
-                  {tool.toUpperCase()}
-                  {isScanning && !scanResult.raw_output?.[tool] && tool !== 'ai' && (
-                    <span style={{ 
-                      width: '6px', height: '6px', background: '#ffcc00', 
-                      borderRadius: '50%', position: 'absolute', top: '5px', right: '5px',
-                      boxShadow: '0 0 5px #ffcc00'
-                    }}></span>
-                  )}
-                  {isScanning && tool === 'ai' && !scanResult.ai_analysis && (
-                    <span className="spinner-small" style={{ position: 'absolute', top: '5px', right: '5px' }}></span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <div className="glass-panel" style={{ padding: '40px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '32px' }}>
+              <h3 style={{ marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>Identified Vulnerabilities</h3>
+              <div className="vuln-list">
+                {!scanResult.vulnerabilities || scanResult.vulnerabilities.length === 0 ? (
+                  <p style={{ color: 'var(--success)' }}>No vulnerabilities identified by AI.</p>
+                ) : (
+                  scanResult.vulnerabilities.map((vuln, idx) => {
+                    const sevMap = { 'high': 'high', 'critical': 'high', 'medium': 'medium', 'low': 'low' };
+                    const sClass = sevMap[vuln.severity?.toLowerCase()] || 'low';
+                    const colors = { high: 'var(--danger)', medium: 'var(--warning)', low: 'var(--success)' };
+                    const color = colors[sClass];
 
-            {/* Content display */}
-            <div>
-              <h3 style={{ color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {TOOL_LABELS[activeTab]}
-                {activeTab === 'ai' && isScanning && <span className="spinner-small"></span>}
-              </h3>
-              <div className="terminal-mode" style={{ 
-                minHeight: '400px', 
-                whiteSpace: 'pre-wrap', 
-                wordBreak: 'break-all', 
-                fontSize: activeTab === 'ai' ? '1rem' : '0.85rem', 
-                lineHeight: '1.8',
-                color: activeTab === 'ai' ? '#fff' : 'var(--success)',
-                background: activeTab === 'ai' ? 'rgba(0,0,0,0.85)' : '#000',
-                border: activeTab === 'ai' ? '1px solid var(--accent-purple)' : '1px solid rgba(0, 255, 136, 0.2)',
-                padding: '30px',
-                boxShadow: activeTab === 'ai' ? '0 0 40px rgba(157, 0, 255, 0.1)' : 'none'
-              }}>
-                {activeTab === 'ai' 
-                  ? (scanResult.ai_analysis || (isScanning ? "Orby AI is currently synthesizing tool outputs into a security report...\n\n> Parsing Nmap service versions\n> Evaluating Nikto vulnerability surface\n> Correlating WhatWeb tech stack..." : "Awaiting final analysis results."))
-                  : (scanResult.raw_output?.[activeTab] || (isScanning ? `[SYSTEM] Awaiting output from ${activeTab}...\n[SYSTEM] Establishing remote connection...` : `No output for ${activeTab}.`))
-                }
+                    return (
+                      <div key={idx} className={`vulnerability-card`} style={{ background: 'rgba(0, 0, 0, 0.4)', borderLeft: `4px solid ${color}`, padding: '16px', marginBottom: '16px', borderRadius: '0 8px 8px 0' }}>
+                        <div className="vuln-title" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <h4 style={{ fontSize: '1.2rem', color: '#fff' }}>{vuln.title}</h4>
+                          <span className={`badge badge-${sClass}`} style={{ padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', background: `${color}33`, color: color }}>
+                            {vuln.severity}
+                          </span>
+                        </div>
+                        <p className="vuln-desc" style={{ color: 'var(--text-muted)', marginBottom: '12px', fontSize: '0.95rem' }}>{vuln.description}</p>
+                        <div className="vuln-rec" style={{ background: 'rgba(0, 243, 255, 0.05)', padding: '12px', borderRadius: '6px', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.9rem', color: 'var(--accent-cyan)' }}>
+                          <strong style={{ color: '#fff' }}>Remediation:</strong> {vuln.recommendation}
+                        </div>
+                        
+                        {vuln.remediation_script && vuln.remediation_script.trim() !== '' && (
+                          <div style={{ marginTop: '12px', background: '#000', padding: '16px', borderRadius: '8px', border: '1px solid var(--glass-border)', position: 'relative' }}>
+                            <span style={{ position: 'absolute', top: '8px', right: '12px', fontSize: '0.75rem', color: 'var(--accent-cyan)', textTransform: 'uppercase' }}>Autonomous Fix</span>
+                            <pre style={{ color: 'var(--success)', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem', overflowX: 'auto', margin: 0 }}>
+                              {vuln.remediation_script}
+                            </pre>
+                            <button 
+                              onClick={(e) => {
+                                handleCopyScript(vuln.remediation_script); 
+                                e.target.innerText='Copied!'; 
+                                setTimeout(()=>e.target.innerText='Copy Script', 2000)
+                              }} 
+                              style={{ marginTop: '12px', background: 'rgba(0,243,255,0.1)', border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                              Copy Script
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -239,135 +244,52 @@ export default function Dashboard() {
 
         {/* History */}
         {showHistory && (
-          <div className="glass-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div className="glass-panel" style={{ padding: '40px', background: 'var(--glass-bg)', backdropFilter: 'blur(24px)', border: '1px solid var(--glass-border)', borderRadius: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
               <h2 style={{ color: 'var(--accent-cyan)' }}>Scan History</h2>
-              <button className="glow-btn" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '0.8rem' }}
-                onClick={() => setShowHistory(false)}>
+              <button onClick={() => setShowHistory(false)} style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid var(--glass-border)', padding: '8px 20px', borderRadius: '12px', cursor: 'pointer' }}>
                 ✕ Close
               </button>
             </div>
             {history.length === 0 ? (
               <p style={{ color: 'var(--text-muted)' }}>No scans yet.</p>
             ) : (
-              history.map((s, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '12px 0', borderBottom: '1px solid var(--card-border)'
-                }}>
-                  <span style={{ color: 'var(--accent-cyan)' }}>{s.target}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    {new Date(s.created_at).toLocaleString()} — {s.status}
-                  </span>
-                  <button className="glow-btn" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
-                    onClick={() => { 
-                      setScanResult(s); 
-                      setTarget(s.target);
-                      setScanId(s._id || s.id);
-                      setIsScanning(s.status === 'running');
-                      setShowHistory(false); 
-                    }}>
-                    View
-                  </button>
-                </div>
-              ))
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {history.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', borderRadius: '16px' }}>
+                    <div>
+                      <h4 style={{ color: 'var(--accent-cyan)', marginBottom: '8px', fontSize: '1.2rem' }}>{s.target}</h4>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{new Date(s.created_at).toLocaleString()} • <span style={{ color: s.status === 'completed' ? 'var(--success)' : 'var(--warning)' }}>{s.status.toUpperCase()}</span></p>
+                    </div>
+                    {s.status === 'completed' && (
+                      <button onClick={() => { 
+                          setScanResult(s); 
+                          setTarget(s.target);
+                          setScanId(s._id || s.id);
+                          setIsScanning(false);
+                          setShowHistory(false); 
+                        }} 
+                        style={{ background: '#fff', color: '#000', padding: '8px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', border: 'none' }}>
+                        View Report
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
 
         {!isScanning && !scanResult && !showHistory && (
-          <div className="glass-panel" style={{ textAlign: 'center', opacity: 0.5 }}>
-            <p>Enter a target above to begin a comprehensive security scan.</p>
+          <div className="glass-panel" style={{ textAlign: 'center', opacity: 0.6, padding: '100px 40px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <p style={{ fontSize: '1.2rem' }}>Enter a target above to begin a comprehensive AI security scan.</p>
           </div>
         )}
-
-        {/* Educational Sections */}
-        <div className="info-section">
-          <h2>🛡️ Security Toolkit</h2>
-          <div className="info-grid">
-            <div className="info-card">
-              <h3>🔍 Nmap</h3>
-              <p>Network Mapper identifies open services and potential entry points.</p>
-            </div>
-            <div className="info-card">
-              <h3>🎯 Nuclei</h3>
-              <p>Templated vulnerability scanner for high-confidence security findings across entire infrastructures.</p>
-            </div>
-            <div className="info-card">
-              <h3>🚀 HTTPX</h3>
-              <p>High-performance tool for probing live domains, status codes, and technology stacks at scale.</p>
-            </div>
-            <div className="info-card">
-              <h3>🏗️ Amass</h3>
-              <p>Active and passive domain enumeration to map out an organization's entire external attack surface.</p>
-            </div>
-            <div className="info-card">
-              <h3>🗡️ Katana</h3>
-              <p>Next-generation crawling framework for automated URL discovery and web resource spidering.</p>
-            </div>
-            <div className="info-card">
-              <h3>🧹 GAU</h3>
-              <p>Fetches known URLs from web archives to uncover long-forgotten or hidden endpoints.</p>
-            </div>
-            <div className="info-card">
-              <h3>🛡️ Nikto</h3>
-              <p>Tests for over 6,700 dangerous files, outdated versions, and server misconfigurations.</p>
-            </div>
-            <div className="info-card">
-              <h3>📡 Subfinder</h3>
-              <p>Fast passive subdomain discovery tool using multiple data sources.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="info-section">
-          <h2>💻 The Power of Kali Linux</h2>
-          <div className="glass-panel">
-            <p style={{ color: 'var(--text-muted)', lineHeight: '1.8' }}>
-              Kali Linux is a Debian-derived Linux distribution designed for digital forensics and penetration testing. 
-              Our platform leverages the power of Kali's enterprise-grade security tools to provide you with raw, 
-              unfiltered security data. By running these tools on an isolated Kali instance, we ensure that deep 
-              scanning is performed safely and professionally.
-            </p>
-          </div>
-        </div>
-
-        <div className="info-section">
-          <h2>⚡ How It Works</h2>
-          <div className="info-grid">
-            <div className="info-card">
-              <div className="tech-step">
-                <div className="step-num">1</div>
-                <div className="step-content">
-                  <h4>Initiate Scan</h4>
-                  <p>You provide a target URL or IP. Our React frontend sends this to the FastAPI backend immediately.</p>
-                </div>
-              </div>
-              <div className="tech-step">
-                <div className="step-num">2</div>
-                <div className="step-content">
-                  <h4>Secure SSH Tunnel</h4>
-                  <p>The backend establishes an encrypted SSH connection to a remote Kali Linux machine.</p>
-                </div>
-              </div>
-              <div className="tech-step">
-                <div className="step-num">3</div>
-                <div className="step-content">
-                  <h4>Distributed Scanning</h4>
-                  <p>All security tools (Nmap, Nikto, etc.) run concurrently on the Kali machine to maximize speed.</p>
-                </div>
-              </div>
-              <div className="tech-step">
-                <div className="step-num">4</div>
-                <div className="step-content">
-                  <h4>Live Streaming</h4>
-                  <p>Raw outputs are piped back through the tunnel, stored in MongoDB, and streamed to your dashboard in real-time.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </main>
+      
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+      `}} />
     </div>
   )
 }
